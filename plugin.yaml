@@ -1,0 +1,11 @@
+name: shortcut
+version: 0.1.0
+description: "Guided multi-step configuration flows for Hermes — composed from the native CLI."
+author: Esteban (via Hermes)
+license: MIT
+
+provides_cli_commands:
+  - shortcut
+
+provides_skills:
+  - shortcut
