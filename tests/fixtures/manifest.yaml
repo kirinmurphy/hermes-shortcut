@@ -1,0 +1,21 @@
+version: 1
+home: ~/projects/hermes
+projects:
+- slug: horizon
+  name: Horizon
+  path: horizon/
+- slug: job-hunt
+  name: Job hunt
+  path: projects/job-hunt/
+  profile: careering
+- slug: consultancy
+  name: Consultancy
+  path: ../activedev/consultancy/
+  profile: careering
+- slug: travel
+  name: Travel
+  path: projects/travel/
+profiles:
+  careering:
+    description: Career work — consultancy brand + job hunt (own desktop sidebar)
+cron: []

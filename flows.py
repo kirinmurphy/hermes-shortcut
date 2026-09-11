@@ -22,11 +22,19 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Paths (resolved at call time, not import time — profiles can shift $HERMES_HOME)
+# Paths. Admin-file paths honor env overrides (same convention as the
+# sidekick sync scripts) so tests/CI can run hermetically against fixtures.
+# The .hermes paths resolve from $HOME and are only exercised live.
 # ---------------------------------------------------------------------------
 
-ECOSYSTEM_MANIFEST = Path.home() / "projects" / "hermes" / "admin" / "ecosystem" / "manifest.yaml"
-PROJECTS_MD = Path.home() / "projects" / "hermes" / "admin" / "PROJECTS.md"
+ECOSYSTEM_MANIFEST = Path(os.environ.get(
+    "HERMES_ECOSYSTEM_MANIFEST",
+    str(Path.home() / "projects" / "hermes" / "admin" / "ecosystem" / "manifest.yaml"),
+))
+PROJECTS_MD = Path(os.environ.get(
+    "HERMES_PROJECTS_MD",
+    str(Path.home() / "projects" / "hermes" / "admin" / "PROJECTS.md"),
+))
 CHECK_SYNC = Path.home() / ".hermes" / "scripts" / "check-sync.py"
 VENV_PYTHON = Path.home() / ".hermes" / "hermes-agent" / "venv" / "bin" / "python"
 

@@ -34,8 +34,13 @@ file ~/.hermes/plugins/shortcut
 ## Tests
 
 ```bash
-~/.hermes/hermes-agent/venv/bin/python -m pytest tests/ -v
+~/.hermes/hermes-agent/venv/bin/python -m unittest discover -s tests -v
 ```
+
+Hermetic — the flow tests run against fixtures in `tests/fixtures/`, no real
+Hermes ecosystem or even a Hermes install required (same suite runs in the
+GitHub CI workflow). Live verification of a flow happens by running the real
+command, e.g. `hermes shortcut explain move-project`.
 
 ## Contracts
 

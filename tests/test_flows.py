@@ -1,18 +1,22 @@
 """Tests for flow logic — explain, move-project no-op, and manifest helpers.
 
-Pure unittest — no pytest dependency. These tests do NOT run real hermes
-subprocesses (except status which runs real check-sync + doctor); they test
-the pure-Python logic paths and the real ecosystem manifest.
+Pure unittest — no pytest dependency. All admin-file paths (ecosystem
+manifest, PROJECTS.md) are redirected to hermetic fixtures so the suite
+runs on any machine (including CI) with zero real-ecosystem dependencies.
+Subprocess-touching paths (check-sync, hermes doctor) are only exercised
+by tests that tolerate either exit code.
 """
 from __future__ import annotations
 
 import io
 import sys
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 # Put the plugin dir on sys.path so we can import _config directly.
 if str(PLUGIN_DIR) not in sys.path:
@@ -30,12 +34,29 @@ def _load_flows():
     return mod.flows
 
 
-class TestExplain(unittest.TestCase):
-    """explain() is pure output — no side effects, no subprocesses."""
+class _FixtureTestCase(unittest.TestCase):
+    """Base: point the flows module's admin-file paths at the fixtures."""
 
     @classmethod
     def setUpClass(cls):
         cls.flows = _load_flows()
+        # The fixture manifest's home is ~/projects/hermes; resolve fixture
+        # project paths against a temp-free canonical base so assertions are
+        # deterministic. We swap the module-level path constants — flows.py
+        # reads them at call time.
+        cls._orig_manifest = cls.flows.ECOSYSTEM_MANIFEST
+        cls._orig_projects_md = cls.flows.PROJECTS_MD
+        cls.flows.ECOSYSTEM_MANIFEST = FIXTURES / "manifest.yaml"
+        cls.flows.PROJECTS_MD = FIXTURES / "PROJECTS.md"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.flows.ECOSYSTEM_MANIFEST = cls._orig_manifest
+        cls.flows.PROJECTS_MD = cls._orig_projects_md
+
+
+class TestExplain(_FixtureTestCase):
+    """explain() is pure output — no side effects, no subprocesses."""
 
     def _explain(self, name):
         buf = io.StringIO()
@@ -70,12 +91,8 @@ class TestExplain(unittest.TestCase):
             self.assertEqual(rc, 0, f"explain('{name}') returned {rc}")
 
 
-class TestMoveProjectNoOp(unittest.TestCase):
+class TestMoveProjectNoOp(_FixtureTestCase):
     """move-project should no-op when the project is already on the target profile."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.flows = _load_flows()
 
     def test_already_on_target_profile(self):
         """job-hunt is on 'careering' in the manifest — moving it to 'careering' should no-op."""
@@ -102,12 +119,8 @@ class TestMoveProjectNoOp(unittest.TestCase):
         self.assertIn("not found", buf.getvalue())
 
 
-class TestManifestHelpers(unittest.TestCase):
-    """Test the manifest path resolution helpers against the real manifest."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.flows = _load_flows()
+class TestManifestHelpers(_FixtureTestCase):
+    """Test the manifest path resolution helpers against the fixture manifest."""
 
     def test_find_project_in_manifest(self):
         manifest = self.flows._load_manifest()
@@ -128,17 +141,54 @@ class TestManifestHelpers(unittest.TestCase):
 
 
 class TestStatusFlow(unittest.TestCase):
-    """status() runs real subprocesses — test it returns 0 or 1."""
+    """status() shells out to check-sync + hermes doctor. For hermetic tests,
+    mock the subprocess layer and verify the summary logic on both outcomes.
+    """
 
     @classmethod
     def setUpClass(cls):
         cls.flows = _load_flows()
 
-    def test_status_returns_int(self):
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            rc = self.flows.status()
-        self.assertIn(rc, (0, 1))
+    def _run_status(self, sync_rc, sync_out, doctor_rc, doctor_out):
+        """Run status() with both subprocess calls faked; return (rc, output)."""
+        def fake_run(cmd, *, check=True, capture=False):
+            result = unittest.mock.Mock()
+            result.returncode = sync_rc
+            result.stdout = sync_out
+            result.stderr = ""
+            return result
+
+        def fake_hermes(*args, check=True, capture=False):
+            result = unittest.mock.Mock()
+            result.returncode = doctor_rc
+            result.stdout = doctor_out
+            result.stderr = ""
+            return result
+
+        with unittest.mock.patch.object(self.flows, "run", side_effect=fake_run), \
+             unittest.mock.patch.object(self.flows, "hermes", side_effect=fake_hermes), \
+             unittest.mock.patch.object(self.flows, "CHECK_SYNC", FIXTURES / "manifest.yaml"), \
+             unittest.mock.patch.object(self.flows, "VENV_PYTHON", FIXTURES / "manifest.yaml"):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = self.flows.status()
+        return rc, buf.getvalue()
+
+    def test_status_all_green(self):
+        rc, out = self._run_status(0, "", 0, "")
+        self.assertEqual(rc, 0)
+        self.assertIn("All green", out)
+        self.assertIn("all surfaces in sync", out)
+
+    def test_status_sync_drift(self):
+        rc, out = self._run_status(1, "DRIFT items found", 0, "")
+        self.assertEqual(rc, 1)
+        self.assertIn("drift found", out)
+
+    def test_status_doctor_failure(self):
+        rc, out = self._run_status(0, "", 1, "some check failed")
+        self.assertEqual(rc, 1)
+        self.assertIn("Doctor: issues found", out)
 
 
 if __name__ == "__main__":
