@@ -6,10 +6,8 @@ Pure unittest — no pytest dependency.
 from __future__ import annotations
 
 import argparse
-import io
 import sys
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
@@ -30,8 +28,9 @@ def _load():
 
 class TestRegistration(unittest.TestCase):
 
-    def setUp(self):
-        self.mod, self.ctx = _load()
+    @classmethod
+    def setUpClass(cls):
+        cls.mod, cls.ctx = _load()
 
     def test_cli_command_registered(self):
         self.assertIn("shortcut", self.ctx.cli_commands)
@@ -66,9 +65,7 @@ class TestRegistration(unittest.TestCase):
 
 
 class TestParserSetup(unittest.TestCase):
-    """Verify the argparse subparser is set up correctly — every subcommand
-    must have its own sub-subparser, or dispatch fails before it reaches the handler.
-    """
+    """Verify the argparse tree maps every command to the right function."""
 
     @classmethod
     def setUpClass(cls):
@@ -80,40 +77,42 @@ class TestParserSetup(unittest.TestCase):
         return parser
 
     def test_move_project_args(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["move-project", "job-hunt", "careering"])
+        args = self._make_parser().parse_args(["move-project", "job-hunt", "careering"])
         self.assertEqual(args.slug, "job-hunt")
         self.assertEqual(args.to_profile, "careering")
         self.assertFalse(args.dry_run)
 
     def test_move_project_dry_run(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["move-project", "job-hunt", "careering", "--dry-run"])
+        args = self._make_parser().parse_args(["move-project", "job-hunt", "careering", "--dry-run"])
         self.assertTrue(args.dry_run)
 
-    def test_explain_args(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["explain", "move-project"])
-        self.assertEqual(args.flow_name, "move-project")
-
-    def test_project_new_args(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["project-new", "My Project", "default", "--path", "/tmp/test"])
+    def test_new_project_args(self):
+        args = self._make_parser().parse_args(["new-project", "My Project", "default", "--path", "/tmp/test"])
         self.assertEqual(args.name, "My Project")
         self.assertEqual(args.profile, "default")
         self.assertEqual(args.path, "/tmp/test")
 
-    def test_status_no_args(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["status"])
-        # status takes no positional args — just verify it doesn't crash.
+    def test_new_profile_args(self):
+        args = self._make_parser().parse_args(["new-profile", "myprofile"])
         self.assertTrue(hasattr(args, "func"))
 
-    def test_profile_new_args(self):
-        parser = self._make_parser()
-        args = parser.parse_args(["profile-new", "myprofile"])
-        # Verify it doesn't crash.
+    def test_explain_args(self):
+        args = self._make_parser().parse_args(["explain", "move-project"])
+        self.assertEqual(args.name, "move-project")
+
+    def test_status_no_args(self):
+        args = self._make_parser().parse_args(["status"])
         self.assertTrue(hasattr(args, "func"))
+
+    def test_every_command_has_a_func(self):
+        """Each subcommand must map to a callable — or dispatch fails."""
+        parser = self._make_parser()
+        for sub in ["move-project", "new-project", "new-profile", "status", "explain"]:
+            argv = {"move-project": ["x", "y"], "new-project": ["n", "p"],
+                    "new-profile": ["n"], "status": [], "explain": ["status"]}[sub]
+            args = parser.parse_args([sub, *argv])
+            self.assertTrue(callable(getattr(args, "func", None)),
+                            f"{sub} did not map to a callable func")
 
 
 if __name__ == "__main__":

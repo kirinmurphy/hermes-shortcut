@@ -1,10 +1,9 @@
-"""Tests for flow logic — explain, move-project no-op, and manifest helpers.
+"""Tests for flow logic — explain, move-project no-op, and record helpers.
 
 Pure unittest — no pytest dependency. All admin-file paths (ecosystem
 manifest, PROJECTS.md) are redirected to hermetic fixtures so the suite
 runs on any machine (including CI) with zero real-ecosystem dependencies.
-Subprocess-touching paths (check-sync, hermes doctor) are only exercised
-by tests that tolerate either exit code.
+Subprocess-touching paths (check-sync, hermes doctor) are mocked.
 """
 from __future__ import annotations
 
@@ -25,34 +24,27 @@ if str(PLUGIN_DIR) not in sys.path:
 from tests.helpers import load_plugin
 
 
-def _load_flows():
-    """Load the flows module via the plugin namespace."""
-    load_plugin(PLUGIN_DIR)
-    # The __init__.py already imports flows as `from . import flows`,
-    # so it's available as an attribute of the package module.
-    mod = sys.modules["hermes_plugins.shortcut"]
-    return mod.flows
+def _load():
+    """Load the plugin; return (plugin_module, flows, records, info)."""
+    mod = load_plugin(PLUGIN_DIR)
+    return mod, mod.flows, mod.records, mod.info
 
 
 class _FixtureTestCase(unittest.TestCase):
-    """Base: point the flows module's admin-file paths at the fixtures."""
+    """Base: point the records module's admin-file paths at the fixtures."""
 
     @classmethod
     def setUpClass(cls):
-        cls.flows = _load_flows()
-        # The fixture manifest's home is ~/projects/hermes; resolve fixture
-        # project paths against a temp-free canonical base so assertions are
-        # deterministic. We swap the module-level path constants — flows.py
-        # reads them at call time.
-        cls._orig_manifest = cls.flows.ECOSYSTEM_MANIFEST
-        cls._orig_projects_md = cls.flows.PROJECTS_MD
-        cls.flows.ECOSYSTEM_MANIFEST = FIXTURES / "manifest.yaml"
-        cls.flows.PROJECTS_MD = FIXTURES / "PROJECTS.md"
+        cls.plugin, cls.flows, cls.records, cls.info = _load()
+        cls._orig_manifest = cls.records.ECOSYSTEM_MANIFEST
+        cls._orig_projects_md = cls.records.PROJECTS_MD
+        cls.records.ECOSYSTEM_MANIFEST = FIXTURES / "manifest.yaml"
+        cls.records.PROJECTS_MD = FIXTURES / "PROJECTS.md"
 
     @classmethod
     def tearDownClass(cls):
-        cls.flows.ECOSYSTEM_MANIFEST = cls._orig_manifest
-        cls.flows.PROJECTS_MD = cls._orig_projects_md
+        cls.records.ECOSYSTEM_MANIFEST = cls._orig_manifest
+        cls.records.PROJECTS_MD = cls._orig_projects_md
 
 
 class TestExplain(_FixtureTestCase):
@@ -61,7 +53,7 @@ class TestExplain(_FixtureTestCase):
     def _explain(self, name):
         buf = io.StringIO()
         with redirect_stdout(buf):
-            rc = self.flows.explain(name)
+            rc = self.info.explain(name)
         return rc, buf.getvalue()
 
     def test_explain_known_flow(self):
@@ -71,6 +63,13 @@ class TestExplain(_FixtureTestCase):
         self.assertIn("Summary:", out)
         self.assertIn("Commands it runs:", out)
         self.assertIn("What it touches:", out)
+
+    def test_explain_labels_kind(self):
+        """Flows and utilities are labeled with their kind."""
+        _, out_flow = self._explain("move-project")
+        self.assertIn("(flow)", out_flow)
+        _, out_util = self._explain("status")
+        self.assertIn("(utility)", out_util)
 
     def test_explain_status(self):
         rc, out = self._explain("status")
@@ -82,11 +81,11 @@ class TestExplain(_FixtureTestCase):
         rc, out = self._explain("nonexistent")
         self.assertEqual(rc, 1)
         self.assertIn("Unknown flow", out)
-        self.assertIn("Available flows:", out)
+        self.assertIn("Available:", out)
 
-    def test_explain_all_flows(self):
-        """Every documented flow should be explainable."""
-        for name in ["move-project", "status", "project-new", "profile-new"]:
+    def test_explain_all(self):
+        """Every documented flow/utility should be explainable."""
+        for name in ["move-project", "new-project", "new-profile", "status"]:
             rc, _ = self._explain(name)
             self.assertEqual(rc, 0, f"explain('{name}') returned {rc}")
 
@@ -95,7 +94,7 @@ class TestMoveProjectNoOp(_FixtureTestCase):
     """move-project should no-op when the project is already on the target profile."""
 
     def test_already_on_target_profile(self):
-        """job-hunt is on 'careering' in the manifest — moving it to 'careering' should no-op."""
+        """job-hunt is on 'careering' in the fixture — moving it there is a no-op."""
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc = self.flows.move_project("job-hunt", "careering", dry_run=False)
@@ -120,34 +119,36 @@ class TestMoveProjectNoOp(_FixtureTestCase):
 
 
 class TestManifestHelpers(_FixtureTestCase):
-    """Test the manifest path resolution helpers against the fixture manifest."""
+    """Test the record helpers against the fixture manifest."""
 
     def test_find_project_in_manifest(self):
-        manifest = self.flows._load_manifest()
-        entry = self.flows._find_project_in_manifest(manifest, "job-hunt")
+        entry = self.records.find_project("job-hunt")
         self.assertIsNotNone(entry)
         self.assertEqual(entry["slug"], "job-hunt")
         self.assertEqual(entry["profile"], "careering")
 
     def test_find_project_not_in_manifest(self):
-        manifest = self.flows._load_manifest()
-        entry = self.flows._find_project_in_manifest(manifest, "nonexistent")
-        self.assertIsNone(entry)
+        self.assertIsNone(self.records.find_project("nonexistent"))
 
     def test_manifest_has_profiles_section(self):
-        manifest = self.flows._load_manifest()
+        manifest = self.records.load_manifest()
         self.assertIn("profiles", manifest)
         self.assertIn("careering", manifest["profiles"])
 
+    def test_resolve_path_relative_to_home(self):
+        entry = self.records.find_project("job-hunt")
+        path = self.records.resolve_path(entry)
+        self.assertTrue(str(path).endswith("projects/job-hunt"))
+
 
 class TestStatusFlow(unittest.TestCase):
-    """status() shells out to check-sync + hermes doctor. For hermetic tests,
-    mock the subprocess layer and verify the summary logic on both outcomes.
+    """status() shells out to check-sync + hermes doctor. Mock the subprocess
+    layer and verify the summary logic on each outcome.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.flows = _load_flows()
+        cls.plugin, cls.flows, cls.records, cls.info = _load()
 
     def _run_status(self, sync_rc, sync_out, doctor_rc, doctor_out):
         """Run status() with both subprocess calls faked; return (rc, output)."""
@@ -165,13 +166,13 @@ class TestStatusFlow(unittest.TestCase):
             result.stderr = ""
             return result
 
-        with unittest.mock.patch.object(self.flows, "run", side_effect=fake_run), \
-             unittest.mock.patch.object(self.flows, "hermes", side_effect=fake_hermes), \
-             unittest.mock.patch.object(self.flows, "CHECK_SYNC", FIXTURES / "manifest.yaml"), \
-             unittest.mock.patch.object(self.flows, "VENV_PYTHON", FIXTURES / "manifest.yaml"):
+        with unittest.mock.patch.object(self.info, "hermes", side_effect=fake_hermes), \
+             unittest.mock.patch.object(self.info.runner, "run", side_effect=fake_run), \
+             unittest.mock.patch.object(self.info.runner, "CHECK_SYNC", FIXTURES / "manifest.yaml"), \
+             unittest.mock.patch.object(self.info.runner, "VENV_PYTHON", FIXTURES / "manifest.yaml"):
             buf = io.StringIO()
             with redirect_stdout(buf):
-                rc = self.flows.status()
+                rc = self.info.status()
         return rc, buf.getvalue()
 
     def test_status_all_green(self):
