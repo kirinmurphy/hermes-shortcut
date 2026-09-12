@@ -50,9 +50,9 @@ old chats don't migrate.
 
 ---
 
-## new-project
+## create-project
 
-**Usage:** `hermes shortcut new-project <name> <profile> [--path <dir>]`
+**Usage:** `hermes shortcut create-project <name> <profile> [--path <dir>]`
 
 Create a new project and register it everywhere. The exact macro:
 
@@ -76,9 +76,9 @@ registry, the ecosystem manifest, PROJECTS.md.
 
 ---
 
-## new-profile
+## create-profile
 
-**Usage:** `hermes shortcut new-profile <name>`
+**Usage:** `hermes shortcut create-profile <name>`
 
 Create a profile with an alias and scoped scan roots. The exact macro:
 

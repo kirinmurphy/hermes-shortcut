@@ -27,7 +27,8 @@ from tests.helpers import load_plugin
 def _load():
     """Load the plugin; return (plugin_module, flows, records, info)."""
     mod = load_plugin(PLUGIN_DIR)
-    return mod, mod.flows, mod.records, mod.info
+    core = mod.core  # execution code lives in core/ (see __init__.py docstring)
+    return mod, core.flows, core.records, core.info
 
 
 class _FixtureTestCase(unittest.TestCase):
@@ -85,7 +86,7 @@ class TestExplain(_FixtureTestCase):
 
     def test_explain_all(self):
         """Every documented flow/utility should be explainable."""
-        for name in ["move-project", "new-project", "new-profile", "status"]:
+        for name in ["move-project", "create-project", "create-profile", "status"]:
             rc, _ = self._explain(name)
             self.assertEqual(rc, 0, f"explain('{name}') returned {rc}")
 

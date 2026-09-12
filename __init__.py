@@ -4,19 +4,19 @@ Composes the EXISTING native ``hermes`` CLI into multi-task flows. It is a
 macro layer, NOT a parallel implementation. When native Hermes absorbs a
 flow, that subcommand gets deleted.
 
-Surface: ``hermes shortcut <flow>`` — registered via register_cli_command.
+Surface: ``hermes shortcut <command>`` — registered via register_cli_command.
 No agent tools, no parallel config store.
 
-Module layout (one job per file):
-  _config.py   identity (NAME / HUMAN_NAME / VERSION / PLUGIN_DIR)
-  cli.py       the argparse tree (argv → functions, no logic)
-  flows.py     the flows — macros over native hermes commands
-  info.py      the utilities (status, explain) — read-only
-  records.py   manifest + PROJECTS.md bookkeeping (declarative spec files)
-  runner.py    subprocess plumbing (how we call hermes, plan printing,
-               the check-sync gate)
+Layout: the loader requires plugin.yaml + this file at the repo root, so the
+root holds only setup/wiring and the execution code lives in ``core/``:
+  _config.py     identity (NAME / HUMAN_NAME / VERSION / PLUGIN_DIR)
+  core/cli.py    the argparse tree (argv → functions, no logic)
+  core/flows.py  the flows — macros over native hermes commands
+  core/info.py   the utilities (status, explain) — read-only
+  core/records.py  manifest + PROJECTS.md bookkeeping (spec files)
+  core/runner.py   subprocess plumbing (hermes calls, plans, the gate)
 
-Contracts (see AGENTS.md):
+Contracts:
   - Compose native ``hermes`` CLI only — never write config/state directly.
   - Print the plan before executing; every flow is idempotent.
   - check-sync gate must stay green after any manifest/PROJECTS.md change.
@@ -26,7 +26,7 @@ Contracts (see AGENTS.md):
 """
 from __future__ import annotations
 
-from . import cli
+from .core import cli
 from ._config import HUMAN_NAME, NAME, PLUGIN_DIR
 
 
@@ -39,7 +39,7 @@ def register(ctx):
         handler_fn=_dispatch,
         description=(
             "Composes the native hermes CLI into multi-step flows: "
-            "move-project, new-project, new-profile. Utilities: status, explain."
+            "move-project, create-project, create-profile. Utilities: status, explain."
         ),
     )
 
@@ -56,8 +56,8 @@ def _dispatch(args):
     no subcommand was given."""
     func = getattr(args, "func", None)
     if func is None:
-        print("Usage: hermes shortcut <flow> [args]")
-        print("Flows: move-project, new-project, new-profile")
+        print("Usage: hermes shortcut <command> [args]")
+        print("Flows: move-project, create-project, create-profile")
         print("Utilities: status, explain")
         print("Run 'hermes shortcut --help' for details.")
         return 0

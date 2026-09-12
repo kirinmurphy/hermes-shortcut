@@ -88,11 +88,11 @@ FLOWS_DOC: dict[str, dict[str, Any]] = {
             "~/projects/hermes/admin/PROJECTS.md",
         ],
     },
-    "new-project": {
+    "create-project": {
         "kind": "flow",
         "summary": "Create a new project: folder (optional), register on a "
                    "profile, add manifest + PROJECTS.md rows.",
-        "args": "new-project <name> <profile> [--path <dir>]",
+        "args": "create-project <name> <profile> [--path <dir>]",
         "commands": [
             "mkdir -p <path>   (only if --path given)",
             "hermes -p <profile> project create <name> --slug <slug> --primary <path>",
@@ -107,11 +107,11 @@ FLOWS_DOC: dict[str, dict[str, Any]] = {
             "~/projects/hermes/admin/PROJECTS.md",
         ],
     },
-    "new-profile": {
+    "create-profile": {
         "kind": "flow",
         "summary": "Create a profile with an alias, scoped repo scan roots, "
                    "and guidance for setting its model.",
-        "args": "new-profile <name>",
+        "args": "create-profile <name>",
         "commands": [
             "hermes profile create <name>",
             "hermes profile alias <name>",

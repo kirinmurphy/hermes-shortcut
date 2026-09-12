@@ -31,11 +31,11 @@ Moves a project between profiles:
 
 Idempotent — already-on-target is a graceful no-op.
 
-### `hermes shortcut new-project <name> <profile> [--path <dir>]`
+### `hermes shortcut create-project <name> <profile> [--path <dir>]`
 Creates a folder (if --path), registers the project on the profile,
 adds manifest + PROJECTS.md rows, runs the check-sync gate.
 
-### `hermes shortcut new-profile <name>`
+### `hermes shortcut create-profile <name>`
 Creates the profile (`hermes profile create` + `alias`), scopes
 `desktop.repo_scan_roots` (default []), and prints how to set its model.
 
@@ -52,8 +52,8 @@ touches. No execution. Use before running an unfamiliar flow.
 ## Choosing
 
 - Move a project between profiles → `move-project`
-- New project → `new-project`
-- New profile → `new-profile`
+- New project → `create-project`
+- New profile → `create-profile`
 - Health check → `status`
 - Review before running → `explain <name>`
 

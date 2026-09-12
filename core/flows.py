@@ -92,10 +92,10 @@ def move_project(slug: str, to_profile: str, *, dry_run: bool = False) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Flow: new-project
+# Flow: create-project
 # ---------------------------------------------------------------------------
 
-def new_project(name: str, profile: str, path: str | None = None, *, dry_run: bool = False) -> int:
+def create_project(name: str, profile: str, path: str | None = None, *, dry_run: bool = False) -> int:
     """Create a new project: folder (optional), register on a profile,
     add manifest + PROJECTS.md rows, run the gate."""
     slug = name.lower().replace(" ", "-").replace("_", "-")
@@ -130,10 +130,10 @@ def new_project(name: str, profile: str, path: str | None = None, *, dry_run: bo
 
 
 # ---------------------------------------------------------------------------
-# Flow: new-profile
+# Flow: create-profile
 # ---------------------------------------------------------------------------
 
-def new_profile(name: str, *, dry_run: bool = False) -> int:
+def create_profile(name: str, *, dry_run: bool = False) -> int:
     """Create a profile: create + alias, scope repo scan roots (default []),
     and print how to set its model. Model choice is interactive — offered,
     not guessed."""

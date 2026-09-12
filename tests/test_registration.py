@@ -86,14 +86,14 @@ class TestParserSetup(unittest.TestCase):
         args = self._make_parser().parse_args(["move-project", "job-hunt", "careering", "--dry-run"])
         self.assertTrue(args.dry_run)
 
-    def test_new_project_args(self):
-        args = self._make_parser().parse_args(["new-project", "My Project", "default", "--path", "/tmp/test"])
+    def test_create_project_args(self):
+        args = self._make_parser().parse_args(["create-project", "My Project", "default", "--path", "/tmp/test"])
         self.assertEqual(args.name, "My Project")
         self.assertEqual(args.profile, "default")
         self.assertEqual(args.path, "/tmp/test")
 
-    def test_new_profile_args(self):
-        args = self._make_parser().parse_args(["new-profile", "myprofile"])
+    def test_create_profile_args(self):
+        args = self._make_parser().parse_args(["create-profile", "myprofile"])
         self.assertTrue(hasattr(args, "func"))
 
     def test_explain_args(self):
@@ -107,9 +107,9 @@ class TestParserSetup(unittest.TestCase):
     def test_every_command_has_a_func(self):
         """Each subcommand must map to a callable — or dispatch fails."""
         parser = self._make_parser()
-        for sub in ["move-project", "new-project", "new-profile", "status", "explain"]:
-            argv = {"move-project": ["x", "y"], "new-project": ["n", "p"],
-                    "new-profile": ["n"], "status": [], "explain": ["status"]}[sub]
+        for sub in ["move-project", "create-project", "create-profile", "status", "explain"]:
+            argv = {"move-project": ["x", "y"], "create-project": ["n", "p"],
+                    "create-profile": ["n"], "status": [], "explain": ["status"]}[sub]
             args = parser.parse_args([sub, *argv])
             self.assertTrue(callable(getattr(args, "func", None)),
                             f"{sub} did not map to a callable func")
