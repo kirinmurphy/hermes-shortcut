@@ -52,7 +52,9 @@ def print_plan(title: str, steps: list[str]) -> None:
 def check_sync_strict() -> int:
     """Run check-sync.py --strict with the venv python. Returns its exit code.
 
-    The contract: any manifest/PROJECTS.md change must leave this green.
+    Post single-source-collapse: the check verifies registered desktop paths
+    exist on disk (the ghost check). Kept as a final step so a flow that
+    re-anchors a registration gets immediate confirmation.
     """
     py = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
     sync = str(CHECK_SYNC) if CHECK_SYNC.exists() else None

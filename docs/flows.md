@@ -2,14 +2,15 @@
 
 `hermes shortcut` has two kinds of commands:
 
-- **Flows** — macros that mutate the ecosystem. Each one composes several
-  native `hermes` CLI commands plus the record bookkeeping, prints its plan
-  first, and is idempotent (safe to re-run).
+- **Flows** — macros that mutate state. Each one composes several native
+  `hermes` CLI commands, prints its plan first, and is idempotent (safe to
+  re-run).
 - **Utilities** — read-only. They report or explain; they never mutate.
 
 The macro principle: shortcut never replaces a hermes command — it composes
-them. Every mutation below is a native command you could run by hand; the
-flow adds ordering, the record sync, and the check-sync gate.
+them, and only where composing beats the single command. Single source of
+truth: each profile's `projects.db`. The plugin runs no record sync and no
+gate; desktop-app creations are first-class records.
 
 ---
 
@@ -17,10 +18,11 @@ flow adds ordering, the record sync, and the check-sync gate.
 
 **Usage:** `hermes shortcut move-project <slug> <to-profile>`
 
-Move a project between profiles. The exact macro:
+Move a project between profiles. The slug is resolved by reading every
+profile's `projects.db` (read-only). The exact macro:
 
 ```bash
-# 0. Look up the project's current profile + path (ecosystem manifest)
+# 0. Find where the slug lives (across profiles). Several hits → pick one.
 
 # 1. If the slug already exists on the target profile:
 hermes -p <to> project add-folder <slug> <path>
@@ -31,68 +33,67 @@ hermes -p <to> project create <name> --slug <slug> --primary <path>
 # 2. Detach from the source profile:
 hermes -p <from> project archive <slug>
 hermes -p <from> project remove-folder <slug> <path>
-
-# 3. Record sync (direct edits — these are declarative spec files):
-#    - ecosystem manifest: set profile: <to> on the project row,
-#      declare <to> in profiles: if missing
-#    - PROJECTS.md: topic column of the project row → <to>
-
-# 4. Gate — must stay green:
-~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/check-sync.py --strict
 ```
 
-**Touches:** target + source profile project registries (via `hermes
-project …`), `~/projects/hermes/admin/ecosystem/manifest.yaml`,
-`~/projects/hermes/admin/PROJECTS.md`.
+**Touches:** target + source profile `projects.db` (via `hermes project …`).
 
 **Reminders printed at the end:** the desktop app needs a quit+relaunch;
 old chats don't migrate.
 
 ---
 
-## create-project
+## attach-project
 
-**Usage:** `hermes shortcut create-project <name> <profile> [--path <dir>]`
+**Usage:** `hermes shortcut attach-project <slug> <profile>`
 
-Create a new project and register it everywhere. The exact macro:
+Attach a project (registered on some profile) to another profile. A
+project may be attached to several profiles. The exact macro:
 
 ```bash
-# 0. Create the folder (only if --path given):
-mkdir -p <path>
+# 0. Find the project's name + path (across profiles' projects.db).
 
-# 1. Register on the profile:
+# 1. If the slug already exists on the target profile:
+hermes -p <profile> project add-folder <slug> <path>
+hermes -p <profile> project set-primary <slug> <path>
+#    otherwise, register fresh:
 hermes -p <profile> project create <name> --slug <slug> --primary <path>
-
-# 2. Record sync (direct edits):
-#    - ecosystem manifest: new project row (slug, name, path, profile)
-#    - PROJECTS.md: new row in the main table
-
-# 3. Gate — must stay green:
-~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/check-sync.py --strict
 ```
 
-**Touches:** the project folder (if `--path`), the profile's project
-registry, the ecosystem manifest, PROJECTS.md.
+**Touches:** the target profile's `projects.db` (via `hermes project …`).
 
 ---
 
-## create-profile
+## Done natively (no flow exists)
 
-**Usage:** `hermes shortcut create-profile <name>`
-
-Create a profile with an alias and scoped scan roots. The exact macro:
+**New profile** — desktop profile builder (Profile switcher → add), or:
 
 ```bash
 hermes profile create <name>
-hermes profile alias <name>
-hermes -p <name> config set desktop.repo_scan_roots []
-
-# Model choice is offered, not guessed:
-#   hermes -p <name> config set model.default <model>   (or: hermes -p <name> model)
 ```
 
-**Touches:** `~/.hermes/profiles/<name>/` (via `hermes profile create` and
-`hermes config set` only).
+**New project** — desktop sidebar "New project", or:
+
+```bash
+mkdir -p <path>   # only if you want the folder created
+hermes -p <profile> project create "<Name>" --primary <path>
+```
+
+The command derives `<slug>` from the name (`--slug` is an override).
+
+**Remove a project from a profile** — right-click → archive in the sidebar, or:
+
+```bash
+hermes -p <profile> project archive <slug>    # restore undoes it
+```
+
+**Scope a profile's Projects section** — Settings → Workspace →
+"Automatic Repository Discovery" OFF. Per profile: ON with empty roots
+scans all of `$HOME`, which is why every repo shows up on a new profile.
+With it off, attach explicitly:
+
+```bash
+hermes shortcut attach-project <slug> <profile>
+```
 
 ---
 
@@ -108,6 +109,24 @@ hermes doctor
 ```
 
 Prints one plain-language summary; exits 0 only when both are clean.
+
+---
+
+## inventory *(utility)*
+
+**Usage:** `hermes shortcut inventory`
+
+Read-only listing of every project registration on every profile:
+
+```bash
+# Walks every home with a config.yaml:
+#   ~/.hermes/projects.db           (default profile)
+#   ~/.hermes/profiles/<name>/projects.db   (each named profile)
+# Prints active (non-archived) registrations grouped by profile.
+```
+
+The cross-profile window onto projects.db. No pass/fail — there is no
+second source to reconcile against.
 
 ---
 

@@ -1,12 +1,13 @@
 """The utilities — things that report or explain, but don't flow.
 
-Utilities differ from flows: no plan, no mutation, no gate. `status`
-reports; `explain` documents. Both are read-only.
+Utilities differ from flows: no plan, no mutation. `status` reports;
+`explain` documents; `inventory` lists. All are read-only.
 """
 from __future__ import annotations
 
 from typing import Any
 
+from . import db
 from . import runner
 from .runner import hermes
 
@@ -58,6 +59,35 @@ def status() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Utility: inventory
+# ---------------------------------------------------------------------------
+
+def inventory() -> int:
+    """List every project registration on every profile. Read-only.
+
+    projects.db is the single source of truth; this is the cross-profile
+    window onto it (no pass/fail, nothing to reconcile)."""
+    rows = db.all_projects()
+    print("\n" + "=" * 60)
+    print("INVENTORY — project registrations across all profiles")
+    print("=" * 60)
+    if not rows:
+        print("\n  No active registrations found on any profile.")
+        return 0
+
+    current = None
+    for r in sorted(rows, key=lambda x: (x["profile"] != "default", x["profile"], x["name"])):
+        if r["profile"] != current:
+            current = r["profile"]
+            print(f"\n  [{current}]")
+        star = "*" if r["primary_path"] else " "
+        print(f"    {star} {r['name']:<28} {r['slug']:<28} {r['primary_path']}")
+    print(f"\n  {len(rows)} registration(s) total. * = has primary folder.")
+    print("  (Single source: each profile's projects.db — no separate spec.)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Utility: explain
 # ---------------------------------------------------------------------------
 
@@ -67,7 +97,8 @@ FLOWS_DOC: dict[str, dict[str, Any]] = {
     "move-project": {
         "kind": "flow",
         "summary": "Move a project between profiles — register on the target, "
-                   "detach from the source, update manifest + PROJECTS.md.",
+                   "detach from the source. Slug is resolved from the "
+                   "per-profile registries; no spec files involved.",
         "args": "move-project <slug> <to-profile>",
         "commands": [
             "hermes -p <to> project show <slug>",
@@ -77,48 +108,26 @@ FLOWS_DOC: dict[str, dict[str, Any]] = {
             "hermes -p <to> project set-primary <slug> <path>",
             "hermes -p <from> project archive <slug>",
             "hermes -p <from> project remove-folder <slug> <path>",
-            "(edit ecosystem manifest: profile: <to> on the project row)",
-            "(edit PROJECTS.md: topic column → <to>)",
-            "~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/check-sync.py --strict",
         ],
         "touches": [
-            "target profile's project registry (via hermes project …)",
-            "source profile's project registry (via hermes project …)",
-            "~/projects/hermes/admin/ecosystem/manifest.yaml",
-            "~/projects/hermes/admin/PROJECTS.md",
+            "target profile's projects.db (via hermes project …)",
+            "source profile's projects.db (via hermes project …)",
         ],
     },
-    "create-project": {
+    "attach-project": {
         "kind": "flow",
-        "summary": "Create a new project: folder (optional), register on a "
-                   "profile, add manifest + PROJECTS.md rows.",
-        "args": "create-project <name> <profile> [--path <dir>]",
+        "summary": "Attach a project (registered on some profile) to another "
+                   "profile. A project may be attached to several profiles.",
+        "args": "attach-project <slug> <profile>",
         "commands": [
-            "mkdir -p <path>   (only if --path given)",
+            "hermes -p <profile> project show <slug>",
             "hermes -p <profile> project create <name> --slug <slug> --primary <path>",
-            "(add ecosystem manifest row)",
-            "(add PROJECTS.md row)",
-            "~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/check-sync.py --strict",
+            "  (or, if the slug already exists on <profile>:)",
+            "hermes -p <profile> project add-folder <slug> <path>",
+            "hermes -p <profile> project set-primary <slug> <path>",
         ],
         "touches": [
-            "the project folder (if --path given)",
-            "profile's project registry (via hermes project create)",
-            "~/projects/hermes/admin/ecosystem/manifest.yaml",
-            "~/projects/hermes/admin/PROJECTS.md",
-        ],
-    },
-    "create-profile": {
-        "kind": "flow",
-        "summary": "Create a profile with an alias, scoped repo scan roots, "
-                   "and guidance for setting its model.",
-        "args": "create-profile <name>",
-        "commands": [
-            "hermes profile create <name>",
-            "hermes profile alias <name>",
-            "hermes -p <name> config set desktop.repo_scan_roots []",
-        ],
-        "touches": [
-            "~/.hermes/profiles/<name>/ (via hermes profile create)",
+            "profile's projects.db (via hermes project …)",
         ],
     },
     "status": {
@@ -129,6 +138,17 @@ FLOWS_DOC: dict[str, dict[str, Any]] = {
         "commands": [
             "~/.hermes/hermes-agent/venv/bin/python ~/.hermes/scripts/check-sync.py",
             "hermes doctor",
+        ],
+        "touches": [],
+    },
+    "inventory": {
+        "kind": "utility",
+        "summary": "List every project registration on every profile — the "
+                   "cross-profile window onto projects.db (the single "
+                   "source). Read-only, no pass/fail.",
+        "args": "inventory",
+        "commands": [
+            "(read every profile's ~/.hermes[/profiles/<name>]/projects.db)",
         ],
         "touches": [],
     },
